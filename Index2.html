@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lokal-Wetter">
+<meta name="theme-color" content="#0f172a">
+<title>Lokal-Wetter</title>
+<style>
+  :root{
+    --bg:#081522;
+    --card:#0f2233;
+    --card2:#153049;
+    --text:#f1f5f9;
+    --muted:#88a0b5;
+    --accent:#00b4d8;
+    --accent2:#0077b6;
+    --warn:#ffb545;
+    --danger:#ff5d5d;
+    --ok:#4ade80;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:linear-gradient(180deg,#081522 0%,#0a1c2e 100%);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    min-height:100vh;
+    padding:env(safe-area-inset-top) 14px calc(env(safe-area-inset-bottom) + 24px);
+    -webkit-tap-highlight-color:transparent;
+  }
+  header{
+    padding:18px 4px 10px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  .brand{
+    display:flex;align-items:center;gap:9px;
+  }
+  .brand-badge{
+    width:34px;height:34px;border-radius:9px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:0.85rem;color:#04121c;
+    flex-shrink:0;
+  }
+  .brand-footer{
+    text-align:center;font-size:0.66rem;color:var(--muted);
+    margin-top:18px;opacity:0.7;
+  }
+  header h1{
+    font-size:1.15rem;
+    margin:0;
+    font-weight:600;
+  }
+  header .loc{
+    font-size:0.8rem;
+    color:var(--muted);
+    margin-top:2px;
+  }
+  #refreshBtn{
+    background:var(--card2);
+    border:none;
+    color:var(--accent);
+    width:38px;height:38px;
+    border-radius:50%;
+    font-size:1.1rem;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .card{
+    background:var(--card);
+    border-radius:18px;
+    padding:16px 18px;
+    margin-bottom:14px;
+    box-shadow:0 4px 18px rgba(0,0,0,0.25);
+  }
+  .card h2{
+    font-size:0.78rem;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--muted);
+    margin:0 0 10px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .now-temp{
+    font-size:3rem;
+    font-weight:700;
+    line-height:1;
+  }
+  .now-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .now-icon{font-size:2.6rem;}
+  .now-desc{color:var(--muted);font-size:0.9rem;margin-top:6px;}
+  .stat-grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+    margin-top:14px;
+  }
+  .stat{
+    background:var(--card2);
+    border-radius:12px;
+    padding:10px;
+    text-align:center;
+  }
+  .stat .v{font-size:1.05rem;font-weight:600;}
+  .stat .l{font-size:0.68rem;color:var(--muted);margin-top:2px;}
+  .rain-bars{
+    display:flex;
+    align-items:flex-end;
+    gap:5px;
+    height:70px;
+    margin-top:6px;
+  }
+  .rain-bar{
+    flex:1;
+    background:var(--accent);
+    border-radius:4px 4px 0 0;
+    min-height:2px;
+    opacity:0.85;
+    position:relative;
+  }
+  .rain-bar.none{background:#2a3556;}
+  .rain-labels{
+    display:flex;
+    gap:5px;
+    margin-top:4px;
+  }
+  .rain-labels span{
+    flex:1;
+    text-align:center;
+    font-size:0.62rem;
+    color:var(--muted);
+  }
+  .rain-summary{font-size:0.82rem;color:var(--muted);margin-bottom:2px;}
+  .pollen-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:7px 0;
+    border-bottom:1px solid rgba(255,255,255,0.06);
+    font-size:0.88rem;
+  }
+  .pollen-row:last-child{border-bottom:none;}
+  .pollen-badge{
+    font-size:0.7rem;
+    font-weight:600;
+    padding:3px 9px;
+    border-radius:20px;
+  }
+  .b-none{background:rgba(74,222,128,0.15);color:var(--ok);}
+  .b-low{background:rgba(94,177,255,0.15);color:var(--accent);}
+  .b-med{background:rgba(255,181,69,0.15);color:var(--warn);}
+  .b-high{background:rgba(255,93,93,0.15);color:var(--danger);}
+  .warn-item{
+    border-radius:12px;
+    padding:12px 14px;
+    margin-bottom:8px;
+    background:rgba(255,93,93,0.1);
+    border:1px solid rgba(255,93,93,0.35);
+  }
+  .warn-item .t{font-weight:600;font-size:0.9rem;color:#ffb0b0;}
+  .warn-item .d{font-size:0.78rem;color:var(--muted);margin-top:4px;}
+  .empty-ok{
+    display:flex;align-items:center;gap:8px;
+    color:var(--ok);font-size:0.88rem;
+  }
+  .muted-note{
+    font-size:0.72rem;color:var(--muted);text-align:center;margin-top:6px;
+  }
+  .status{
+    text-align:center;color:var(--muted);padding:60px 10px;font-size:0.9rem;
+  }
+  .status button{
+    margin-top:14px;
+    background:var(--accent);
+    color:#03203d;
+    border:none;
+    padding:10px 20px;
+    border-radius:10px;
+    font-weight:600;
+    font-size:0.9rem;
+  }
+  .updated{
+    text-align:center;font-size:0.68rem;color:var(--muted);margin-top:6px;
+  }
+  .spinner{
+    width:22px;height:22px;border-radius:50%;
+    border:3px solid rgba(255,255,255,0.15);
+    border-top-color:var(--accent);
+    animation:spin 0.8s linear infinite;
+    margin:0 auto 14px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-badge">NT</div>
+    <div>
+      <h1 id="cityName">Lokal-Wetter</h1>
+      <div class="loc" id="locLabel">Standort wird ermittelt…</div>
+    </div>
+  </div>
+  <button id="refreshBtn" onclick="loadAll()">↻</button>
+</header>
+
+<div id="app">
+  <div class="status" id="statusBox">
+    <div class="spinner"></div>
+    Standort wird angefragt…
+  </div>
+</div>
+
+<script>
+const BS = "https://api.brightsky.dev";
+const OM = "https://air-quality-api.open-meteo.com/v1/air-quality";
+const GEO = "https://geocoding-api.open-meteo.com/v1/reverse";
+
+let coords = null;
+
+function iconFor(condition, isDay){
+  const map = {
+    "clear-day":"☀️","clear-night":"🌙","partly-cloudy-day":"⛅","partly-cloudy-night":"☁️",
+    "cloudy":"☁️","fog":"🌫️","wind":"🌬️","rain":"🌧️","sleet":"🌨️","snow":"❄️","hail":"🌨️",
+    "thunderstorm":"⛈️","dry":isDay?"☀️":"🌙"
+  };
+  return map[condition] || "🌡️";
+}
+
+function pollenBadge(v){
+  if(v === null || v === undefined) return {label:"–", cls:"b-none"};
+  if(v < 10) return {label:"keine", cls:"b-none"};
+  if(v < 25) return {label:"gering", cls:"b-low"};
+  if(v < 50) return {label:"mittel", cls:"b-med"};
+  return {label:"hoch", cls:"b-high"};
+}
+
+function severityColor(sev){
+  if(sev === "extreme" || sev === "severe") return "rgba(255,93,93,0.14)";
+  if(sev === "moderate") return "rgba(255,181,69,0.14)";
+  return "rgba(255,255,255,0.06)";
+}
+
+async function loadAll(){
+  const statusBox = document.getElementById("statusBox");
+  const app = document.getElementById("app");
+  if(!coords){
+    statusBox.innerHTML = '<div class="spinner"></div>Standort wird angefragt…';
+    if(!app.contains(statusBox)) app.innerHTML = "";
+    app.appendChild(statusBox);
+    navigator.geolocation.getCurrentPosition(async pos=>{
+      coords = {lat: pos.coords.latitude, lon: pos.coords.longitude};
+      await render();
+    }, err=>{
+      statusBox.innerHTML = 'Standort nicht verfügbar.<br><span style="font-size:0.78rem">'+err.message+'</span><br><button onclick="loadAll()">Erneut versuchen</button>';
+    }, {enableHighAccuracy:true, timeout:12000});
+  } else {
+    await render();
+  }
+}
+
+async function render(){
+  const app = document.getElementById("app");
+  app.innerHTML = '<div class="status"><div class="spinner"></div>Daten werden geladen…</div>';
+  try{
+    const {lat, lon} = coords;
+
+    fetch(`${GEO}?latitude=${lat}&longitude=${lon}&language=de&count=1`)
+      .then(r=>r.json()).then(g=>{
+        const name = g?.results?.[0]?.name;
+        const admin = g?.results?.[0]?.admin1;
+        document.getElementById("locLabel").textContent = name ? `${name}${admin ? ", "+admin : ""}` : `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+      }).catch(()=>{
+        document.getElementById("locLabel").textContent = `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+      });
+
+    const today = new Date().toISOString().slice(0,10);
+
+    const [curRes, wxRes, alertRes, pollenRes] = await Promise.all([
+      fetch(`${BS}/current_weather?lat=${lat}&lon=${lon}`),
+      fetch(`${BS}/weather?lat=${lat}&lon=${lon}&date=${today}`),
+      fetch(`${BS}/alerts?lat=${lat}&lon=${lon}`),
+      fetch(`${OM}?latitude=${lat}&longitude=${lon}&hourly=alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen,ragweed_pollen&timezone=auto`)
+    ]);
+
+    const cur = (await curRes.json()).weather;
+    const wx = (await wxRes.json()).weather || [];
+    const alerts = (await alertRes.json()).alerts || [];
+    const pollen = await pollenRes.json();
+
+    const now = new Date();
+    const nowHour = now.getHours();
+
+    const futureHours = wx.filter(h => new Date(h.timestamp).getTime() >= now.getTime() - 30*60000).slice(0,8);
+    const maxPrecip = Math.max(1, ...futureHours.map(h=>h.precipitation ?? 0));
+    const totalNext3h = futureHours.slice(0,3).reduce((s,h)=>s+(h.precipitation??0),0);
+
+    let pollenHtml = "";
+    if(pollen?.hourly?.time){
+      const idx = pollen.hourly.time.findIndex(t => new Date(t).getTime() >= now.getTime());
+      const i = idx === -1 ? 0 : idx;
+      const types = [
+        ["Gräser","grass_pollen"],["Birke","birch_pollen"],["Erle","alder_pollen"],
+        ["Beifuß","mugwort_pollen"],["Olive","olive_pollen"],["Ambrosia","ragweed_pollen"]
+      ];
+      pollenHtml = types.map(([label,key])=>{
+        const val = pollen.hourly[key]?.[i];
+        const b = pollenBadge(val);
+        return `<div class="pollen-row"><span>${label}</span><span class="pollen-badge ${b.cls}">${b.label}</span></div>`;
+      }).join("");
+    } else {
+      pollenHtml = '<div class="muted-note">Keine Pollendaten für diesen Standort verfügbar.</div>';
+    }
+
+    let warnHtml = "";
+    if(alerts.length === 0){
+      warnHtml = '<div class="empty-ok">✅ Keine aktuellen Warnungen für deine Region</div>';
+    } else {
+      warnHtml = alerts.map(a=>{
+        return `<div class="warn-item" style="background:${severityColor(a.severity)}">
+          <div class="t">${a.event || "Warnung"}</div>
+          <div class="d">${a.headline || a.description?.slice(0,140) || ""}</div>
+        </div>`;
+      }).join("");
+    }
+
+    const rainBars = futureHours.map(h=>{
+      const p = h.precipitation ?? 0;
+      const hgt = Math.max(2, Math.round((p/maxPrecip)*66));
+      return `<div class="rain-bar ${p===0?'none':''}" style="height:${hgt}px" title="${p}mm"></div>`;
+    }).join("");
+    const rainLabels = futureHours.map(h=>{
+      const d = new Date(h.timestamp);
+      return `<span>${d.getHours()}h</span>`;
+    }).join("");
+
+    app.innerHTML = `
+      <div class="card">
+        <h2>Aktuell</h2>
+        <div class="now-row">
+          <div>
+            <div class="now-temp">${Math.round(cur.temperature)}°</div>
+            <div class="now-desc">${cur.condition ?? ""} · fühlt sich an wie ${Math.round(cur.temperature - (cur.wind_speed>15?2:0))}°</div>
+          </div>
+          <div class="now-icon">${iconFor(cur.icon, nowHour>6 && nowHour<20)}</div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat"><div class="v">${cur.wind_speed ?? "–"} km/h</div><div class="l">Wind</div></div>
+          <div class="stat"><div class="v">${cur.relative_humidity ?? "–"}%</div><div class="l">Luftfeuchte</div></div>
+          <div class="stat"><div class="v">${cur.pressure_msl ?? "–"} hPa</div><div class="l">Luftdruck</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🌧️ Regen (nächste Stunden)</h2>
+        <div class="rain-summary">${totalNext3h > 0 ? `~${totalNext3h.toFixed(1)} mm in den nächsten 3h` : "Kein Regen in den nächsten 3h erwartet"}</div>
+        <div class="rain-bars">${rainBars}</div>
+        <div class="rain-labels">${rainLabels}</div>
+      </div>
+
+      <div class="card">
+        <h2>🌾 Pollenbelastung</h2>
+        ${pollenHtml}
+        <div class="muted-note">Quelle: Open-Meteo (europäisches Pollenmodell)</div>
+      </div>
+
+      <div class="card">
+        <h2>⚠️ Amtliche Warnungen</h2>
+        ${warnHtml}
+      </div>
+
+      <div class="updated">Aktualisiert um ${now.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} · Daten: DWD via Bright Sky, Open-Meteo</div>
+      <div class="brand-footer">NetTronix.de — CI-Farben geschätzt, bitte mit echten Werten abgleichen</div>
+    `;
+
+  } catch(e){
+    app.innerHTML = `<div class="status">Fehler beim Laden der Daten.<br><span style="font-size:0.78rem">${e.message}</span><br><button onclick="loadAll()">Erneut versuchen</button></div>`;
+  }
+}
+
+loadAll();
+</script>
+</body>
+</html>
