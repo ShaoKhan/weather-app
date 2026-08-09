@@ -141,6 +141,38 @@
     color:var(--muted);
   }
   .rain-summary{font-size:0.82rem;color:var(--muted);margin-bottom:2px;}
+  .forecast-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(90px,1fr));
+    gap:8px;
+    margin-top:10px;
+  }
+  .forecast-item{
+    background:var(--card2);
+    border-radius:12px;
+    padding:10px 8px;
+    text-align:center;
+    font-size:0.75rem;
+  }
+  .forecast-item .time{
+    color:var(--muted);
+    font-size:0.65rem;
+    margin-bottom:4px;
+  }
+  .forecast-item .icon{
+    font-size:1.8rem;
+    margin:4px 0;
+  }
+  .forecast-item .temp{
+    font-weight:600;
+    font-size:0.9rem;
+    color:var(--text);
+  }
+  .forecast-item .condition{
+    font-size:0.65rem;
+    color:var(--muted);
+    margin-top:2px;
+  }
   .pollen-row{
     display:flex;
     justify-content:space-between;
@@ -239,6 +271,18 @@ function iconFor(condition, isDay){
   return map[condition] || "🌡️";
 }
 
+function getConditionName(code){
+  const conditions = {
+    0:"Klar",1:"Bewölkt",2:"Stark bewölkt",3:"Regen",
+    45:"Nebel",48:"Nebel",51:"Niesel",53:"Niesel",55:"Starker Niesel",
+    61:"Regen",63:"Mäßiger Regen",65:"Starker Regen",71:"Schnee",
+    73:"Schnee",75:"Starker Schnee",77:"Schneekörner",80:"Regenschauer",
+    81:"Mäßiger Regenschauer",82:"Starker Regenschauer",85:"Schneeschauer",
+    86:"Starker Schneeschauer",95:"Gewitter",96:"Gewitter mit Hagel",99:"Gewitter mit Hagel"
+  };
+  return conditions[code] || "Wechselhaft";
+}
+
 function pollenBadge(v){
   if(v === null || v === undefined) return {label:"–", cls:"b-none"};
   if(v < 10) return {label:"keine", cls:"b-none"};
@@ -319,7 +363,7 @@ async function render(){
 
     // Fallback to Open-Meteo if Bright Sky fails
     if(useFallback){
-      const fallbackRes = await fetch(`${NWP}?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,pressure_msl&hourly=precipitation,weather_code&timezone=auto`);
+      const fallbackRes = await fetch(`${NWP}?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,pressure_msl&hourly=precipitation,weather_code,temperature_2m,wind_speed_10m&timezone=auto`);
       if(!fallbackRes.ok){
         throw new Error('Datenquellen nicht verfügbar. Standort möglicherweise nicht abgedeckt.');
       }
@@ -335,7 +379,7 @@ async function render(){
       curJson = {
         weather: {
           temperature: current.temperature_2m,
-          condition: "Bewölkt",
+          condition: getConditionName(current.weather_code),
           icon: "cloudy",
           wind_speed: current.wind_speed_10m,
           relative_humidity: current.relative_humidity_2m,
@@ -346,7 +390,10 @@ async function render(){
       wxJson = {
         weather: (hourly.time || []).slice(0, 24).map((t, i) => ({
           timestamp: t,
-          precipitation: hourly.precipitation ? hourly.precipitation[i] : 0
+          precipitation: hourly.precipitation ? hourly.precipitation[i] : 0,
+          temperature_2m: hourly.temperature_2m ? hourly.temperature_2m[i] : null,
+          weather_code: hourly.weather_code ? hourly.weather_code[i] : null,
+          wind_speed_10m: hourly.wind_speed_10m ? hourly.wind_speed_10m[i] : null
         }))
       };
 
@@ -374,6 +421,21 @@ async function render(){
     const futureHours = wx.filter(h => new Date(h.timestamp).getTime() >= now.getTime() - 30*60000).slice(0,8);
     const maxPrecip = Math.max(1, ...futureHours.map(h=>h.precipitation ?? 0));
     const totalNext3h = futureHours.slice(0,3).reduce((s,h)=>s+(h.precipitation??0),0);
+
+    // 6-hour forecast
+    const next6h = wx.filter(h => new Date(h.timestamp).getTime() >= now.getTime() - 30*60000).slice(0,6);
+    const forecastHtml = next6h.map(h=>{
+      const d = new Date(h.timestamp);
+      const temp = h.temperature_2m !== null ? Math.round(h.temperature_2m) : "–";
+      const cond = h.weather_code !== null ? getConditionName(h.weather_code) : "–";
+      const icon = h.weather_code !== null ? iconFor("cloudy", d.getHours()>6 && d.getHours()<20) : "🌡️";
+      return `<div class="forecast-item">
+        <div class="time">${d.getHours()}:00</div>
+        <div class="icon">${icon}</div>
+        <div class="temp">${temp}°</div>
+        <div class="condition">${cond}</div>
+      </div>`;
+    }).join("");
 
     let pollenHtml = "";
     if(pollen?.hourly?.time){
@@ -436,6 +498,11 @@ async function render(){
         <div class="rain-summary">${totalNext3h > 0 ? `~${totalNext3h.toFixed(1)} mm in den nächsten 3h` : "Kein Regen in den nächsten 3h erwartet"}</div>
         <div class="rain-bars">${rainBars}</div>
         <div class="rain-labels">${rainLabels}</div>
+      </div>
+
+      <div class="card">
+        <h2>📊 6-Stunden Vorhersage</h2>
+        <div class="forecast-grid">${forecastHtml}</div>
       </div>
 
       <div class="card">
