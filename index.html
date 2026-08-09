@@ -294,10 +294,21 @@ async function render(){
       fetch(`${OM}?latitude=${lat}&longitude=${lon}&hourly=alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen,ragweed_pollen&timezone=auto`)
     ]);
 
-    const cur = (await curRes.json()).weather;
-    const wx = (await wxRes.json()).weather || [];
-    const alerts = (await alertRes.json()).alerts || [];
+    const curJson = await curRes.json();
+    const wxJson = await wxRes.json();
+    const alertJson = await alertRes.json();
     const pollen = await pollenRes.json();
+
+    if(!curRes.ok || !curJson.weather){
+      throw new Error('Aktuelles Wetter: ' + (curJson.detail || curJson.error || `keine Daten für diesen Standort (HTTP ${curRes.status})`));
+    }
+    if(!wxRes.ok){
+      throw new Error('Regen-Vorhersage: ' + (wxJson.detail || wxJson.error || `Fehler (HTTP ${wxRes.status})`));
+    }
+
+    const cur = curJson.weather;
+    const wx = wxJson.weather || [];
+    const alerts = alertJson.alerts || [];
 
     const now = new Date();
     const nowHour = now.getHours();
