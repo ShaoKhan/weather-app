@@ -226,6 +226,7 @@
 const BS = "https://api.brightsky.dev";
 const OM = "https://air-quality-api.open-meteo.com/v1/air-quality";
 const GEO = "https://geocoding-api.open-meteo.com/v1/reverse";
+const NWP = "https://api.open-meteo.com/v1/forecast";
 
 let coords = null;
 
@@ -287,23 +288,76 @@ async function render(){
 
     const today = new Date().toISOString().slice(0,10);
 
-    const [curRes, wxRes, alertRes, pollenRes] = await Promise.all([
+    // Try Bright Sky first
+    const bsRequests = await Promise.allSettled([
       fetch(`${BS}/current_weather?lat=${lat}&lon=${lon}`),
       fetch(`${BS}/weather?lat=${lat}&lon=${lon}&date=${today}`),
-      fetch(`${BS}/alerts?lat=${lat}&lon=${lon}`),
-      fetch(`${OM}?latitude=${lat}&longitude=${lon}&hourly=alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen,ragweed_pollen&timezone=auto`)
+      fetch(`${BS}/alerts?lat=${lat}&lon=${lon}`)
     ]);
 
-    const curJson = await curRes.json();
-    const wxJson = await wxRes.json();
-    const alertJson = await alertRes.json();
-    const pollen = await pollenRes.json();
-
-    if(!curRes.ok || !curJson?.weather){
-      throw new Error('Aktuelles Wetter: ' + (curJson?.detail || curJson?.error || `keine Daten für diesen Standort (HTTP ${curRes.status})`));
+    let curJson, wxJson, alertJson, useFallback = false;
+    
+    if(bsRequests[0].status === 'fulfilled' && bsRequests[0].value.ok){
+      curJson = await bsRequests[0].value.json();
+      if(!curJson?.weather) useFallback = true;
+    } else {
+      useFallback = true;
     }
-    if(!wxRes.ok || !wxJson?.weather){
-      throw new Error('Regen-Vorhersage: ' + (wxJson?.detail || wxJson?.error || `Fehler (HTTP ${wxRes.status})`));
+
+    if(bsRequests[1].status === 'fulfilled' && bsRequests[1].value.ok){
+      wxJson = await bsRequests[1].value.json();
+      if(!wxJson?.weather) useFallback = true;
+    } else {
+      useFallback = true;
+    }
+
+    if(bsRequests[2].status === 'fulfilled' && bsRequests[2].value.ok){
+      alertJson = await bsRequests[2].value.json();
+    } else {
+      alertJson = {alerts: []};
+    }
+
+    // Fallback to Open-Meteo if Bright Sky fails
+    if(useFallback){
+      const fallbackRes = await fetch(`${NWP}?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,pressure_msl&hourly=precipitation,weather_code&timezone=auto`);
+      if(!fallbackRes.ok){
+        throw new Error('Datenquellen nicht verfügbar. Standort möglicherweise nicht abgedeckt.');
+      }
+      
+      const fallbackData = await fallbackRes.json();
+      if(!fallbackData?.current){
+        throw new Error('Ungültige Antwort von der Wetter-API.');
+      }
+
+      const current = fallbackData.current;
+      const hourly = fallbackData.hourly || {};
+      
+      curJson = {
+        weather: {
+          temperature: current.temperature_2m,
+          condition: "Bewölkt",
+          icon: "cloudy",
+          wind_speed: current.wind_speed_10m,
+          relative_humidity: current.relative_humidity_2m,
+          pressure_msl: current.pressure_msl
+        }
+      };
+
+      wxJson = {
+        weather: (hourly.time || []).slice(0, 24).map((t, i) => ({
+          timestamp: t,
+          precipitation: hourly.precipitation ? hourly.precipitation[i] : 0
+        }))
+      };
+
+      alertJson = { alerts: [] };
+    }
+
+    // Pollen data (separate, optional)
+    const pollenRes = await fetch(`${OM}?latitude=${lat}&longitude=${lon}&hourly=alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen,ragweed_pollen&timezone=auto`).catch(()=>({ok:false}));
+    let pollen = null;
+    if(pollenRes.ok){
+      pollen = await pollenRes.json();
     }
 
     const cur = curJson.weather;
