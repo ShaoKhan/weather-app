@@ -337,21 +337,43 @@ async function render(){
 
     const today = new Date().toISOString().slice(0,10);
 
-    const [curRes, wxRes, alertRes, pollenRes] = await Promise.all([
+    // Verbessertes Fehler-Reporting: Promise.allSettled verwenden und einzelne Antworten prüfen
+    const fetches = await Promise.allSettled([
       fetch(`${BS}/current_weather?lat=${lat}&lon=${lon}&max_dist=200000`),
       fetch(`${BS}/weather?lat=${lat}&lon=${lon}&date=${today}&max_dist=200000`),
       fetch(`${BS}/alerts?lat=${lat}&lon=${lon}`),
       fetch(`${OM}?latitude=${lat}&longitude=${lon}&hourly=alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen,ragweed_pollen&timezone=auto`)
     ]);
 
-    const curJson = await curRes.json();
-    const wxJson = await wxRes.json();
-    const alertJson = await alertRes.json();
-    const pollen = await pollenRes.json();
-
-    if(!wxRes.ok){
-      throw new Error('Regen-Vorhersage: ' + (wxJson.detail || wxJson.error || `Fehler (HTTP ${wxRes.status})`));
+    function check(result, name){
+      if(result.status === 'rejected') throw new Error(`${name}: Netzwerkfehler (${result.reason && result.reason.message ? result.reason.message : result.reason})`);
+      return result.value;
     }
+
+    const [curRes, wxRes, alertRes, pollenRes] = ['current_weather','weather','alerts','pollen'].map((n,i)=> check(fetches[i], n));
+
+    // HTTP-Status prüfen und ggf. aussagekräftige Fehlermeldungen erzeugen
+    if(!curRes.ok) {
+      const txt = await curRes.text().catch(()=>null);
+      throw new Error(`current_weather: HTTP ${curRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`);
+    }
+    if(!wxRes.ok) {
+      const txt = await wxRes.text().catch(()=>null);
+      throw new Error(`weather: HTTP ${wxRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`);
+    }
+    if(!alertRes.ok) {
+      const txt = await alertRes.text().catch(()=>null);
+      throw new Error(`alerts: HTTP ${alertRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`);
+    }
+    if(!pollenRes.ok) {
+      const txt = await pollenRes.text().catch(()=>null);
+      throw new Error(`pollen: HTTP ${pollenRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`);
+    }
+
+    const curJson = await curRes.json().catch(()=>{ throw new Error('current_weather: ungültiges JSON'); });
+    const wxJson = await wxRes.json().catch(()=>{ throw new Error('weather: ungültiges JSON'); });
+    const alertJson = await alertRes.json().catch(()=>{ throw new Error('alerts: ungültiges JSON'); });
+    const pollen = await pollenRes.json().catch(()=>{ throw new Error('pollen: ungültiges JSON'); });
 
     const wx = wxJson.weather || [];
     const alerts = (alertJson && alertJson.alerts) || [];
