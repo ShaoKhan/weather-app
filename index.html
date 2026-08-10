@@ -141,38 +141,6 @@
     color:var(--muted);
   }
   .rain-summary{font-size:0.82rem;color:var(--muted);margin-bottom:2px;}
-  .forecast-grid{
-    display:grid;
-    grid-template-columns:repeat(auto-fit,minmax(90px,1fr));
-    gap:8px;
-    margin-top:10px;
-  }
-  .forecast-item{
-    background:var(--card2);
-    border-radius:12px;
-    padding:10px 8px;
-    text-align:center;
-    font-size:0.75rem;
-  }
-  .forecast-item .time{
-    color:var(--muted);
-    font-size:0.65rem;
-    margin-bottom:4px;
-  }
-  .forecast-item .icon{
-    font-size:1.8rem;
-    margin:4px 0;
-  }
-  .forecast-item .temp{
-    font-weight:600;
-    font-size:0.9rem;
-    color:var(--text);
-  }
-  .forecast-item .condition{
-    font-size:0.65rem;
-    color:var(--muted);
-    margin-top:2px;
-  }
   .pollen-row{
     display:flex;
     justify-content:space-between;
@@ -232,6 +200,53 @@
     margin:0 auto 14px;
   }
   @keyframes spin{to{transform:rotate(360deg);}}
+
+  .stell-card{
+    background:var(--card2);
+    border-radius:14px;
+    margin-bottom:10px;
+    overflow:hidden;
+  }
+  .stell-head{
+    display:flex;
+    gap:10px;
+    padding:10px;
+    align-items:center;
+    cursor:pointer;
+    list-style:none;
+  }
+  .stell-head::-webkit-details-marker{display:none;}
+  .stell-img{
+    width:54px;height:54px;border-radius:10px;
+    object-fit:cover;flex-shrink:0;
+    background:#0a1c2e;
+    display:flex;align-items:center;justify-content:center;
+    font-size:1.4rem;
+  }
+  .stell-info{flex:1;min-width:0;}
+  .stell-name{font-size:0.9rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .stell-dist{font-size:0.75rem;color:var(--muted);margin-top:2px;}
+  .stell-chevron{color:var(--muted);font-size:0.8rem;transition:transform 0.2s;}
+  details[open] .stell-chevron{transform:rotate(180deg);}
+  .stell-body{
+    padding:0 12px 12px;
+    font-size:0.82rem;
+    color:var(--muted);
+    line-height:1.5;
+  }
+  .stell-body .row{margin-bottom:4px;}
+  .stell-body .row b{color:var(--text);font-weight:500;}
+  .stell-route-btn{
+    display:inline-block;
+    margin-top:8px;
+    background:var(--accent);
+    color:#03203d;
+    font-weight:600;
+    font-size:0.8rem;
+    padding:8px 14px;
+    border-radius:9px;
+    text-decoration:none;
+  }
 </style>
 </head>
 <body>
@@ -253,12 +268,12 @@
     Standort wird angefragt…
   </div>
 </div>
+<div id="stellApp"></div>
 
 <script>
 const BS = "https://api.brightsky.dev";
 const OM = "https://air-quality-api.open-meteo.com/v1/air-quality";
 const GEO = "https://geocoding-api.open-meteo.com/v1/reverse";
-const NWP = "https://api.open-meteo.com/v1/forecast";
 
 let coords = null;
 
@@ -269,18 +284,6 @@ function iconFor(condition, isDay){
     "thunderstorm":"⛈️","dry":isDay?"☀️":"🌙"
   };
   return map[condition] || "🌡️";
-}
-
-function getConditionName(code){
-  const conditions = {
-    0:"Klar",1:"Bewölkt",2:"Stark bewölkt",3:"Regen",
-    45:"Nebel",48:"Nebel",51:"Niesel",53:"Niesel",55:"Starker Niesel",
-    61:"Regen",63:"Mäßiger Regen",65:"Starker Regen",71:"Schnee",
-    73:"Schnee",75:"Starker Schnee",77:"Schneekörner",80:"Regenschauer",
-    81:"Mäßiger Regenschauer",82:"Starker Regenschauer",85:"Schneeschauer",
-    86:"Starker Schneeschauer",95:"Gewitter",96:"Gewitter mit Hagel",99:"Gewitter mit Hagel"
-  };
-  return conditions[code] || "Wechselhaft";
 }
 
 function pollenBadge(v){
@@ -307,11 +310,13 @@ async function loadAll(){
     navigator.geolocation.getCurrentPosition(async pos=>{
       coords = {lat: pos.coords.latitude, lon: pos.coords.longitude};
       await render();
+      loadStellplaetze();
     }, err=>{
       statusBox.innerHTML = 'Standort nicht verfügbar.<br><span style="font-size:0.78rem">'+err.message+'</span><br><button onclick="loadAll()">Erneut versuchen</button>';
     }, {enableHighAccuracy:true, timeout:12000});
   } else {
     await render();
+    loadStellplaetze();
   }
 }
 
@@ -332,87 +337,39 @@ async function render(){
 
     const today = new Date().toISOString().slice(0,10);
 
-    // Try Bright Sky first
-    const bsRequests = await Promise.allSettled([
-      fetch(`${BS}/current_weather?lat=${lat}&lon=${lon}`),
-      fetch(`${BS}/weather?lat=${lat}&lon=${lon}&date=${today}`),
-      fetch(`${BS}/alerts?lat=${lat}&lon=${lon}`)
+    const [curRes, wxRes, alertRes, pollenRes] = await Promise.all([
+      fetch(`${BS}/current_weather?lat=${lat}&lon=${lon}&max_dist=200000`),
+      fetch(`${BS}/weather?lat=${lat}&lon=${lon}&date=${today}&max_dist=200000`),
+      fetch(`${BS}/alerts?lat=${lat}&lon=${lon}`),
+      fetch(`${OM}?latitude=${lat}&longitude=${lon}&hourly=alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen,ragweed_pollen&timezone=auto`)
     ]);
 
-    let curJson, wxJson, alertJson, useFallback = false;
-    
-    if(bsRequests[0].status === 'fulfilled' && bsRequests[0].value.ok){
-      curJson = await bsRequests[0].value.json();
-      if(!curJson?.weather) useFallback = true;
-    } else {
-      useFallback = true;
+    const curJson = await curRes.json();
+    const wxJson = await wxRes.json();
+    const alertJson = await alertRes.json();
+    const pollen = await pollenRes.json();
+
+    if(!wxRes.ok){
+      throw new Error('Regen-Vorhersage: ' + (wxJson.detail || wxJson.error || `Fehler (HTTP ${wxRes.status})`));
     }
 
-    if(bsRequests[1].status === 'fulfilled' && bsRequests[1].value.ok){
-      wxJson = await bsRequests[1].value.json();
-      if(!wxJson?.weather) useFallback = true;
-    } else {
-      useFallback = true;
-    }
-
-    if(bsRequests[2].status === 'fulfilled' && bsRequests[2].value.ok){
-      alertJson = await bsRequests[2].value.json();
-    } else {
-      alertJson = {alerts: []};
-    }
-
-    // Fallback to Open-Meteo if Bright Sky fails
-    if(useFallback){
-      const fallbackRes = await fetch(`${NWP}?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,pressure_msl&hourly=precipitation,weather_code,temperature_2m,wind_speed_10m&timezone=auto`);
-      if(!fallbackRes.ok){
-        throw new Error('Datenquellen nicht verfügbar. Standort möglicherweise nicht abgedeckt.');
-      }
-      
-      const fallbackData = await fallbackRes.json();
-      if(!fallbackData?.current){
-        throw new Error('Ungültige Antwort von der Wetter-API.');
-      }
-
-      const current = fallbackData.current;
-      const hourly = fallbackData.hourly || {};
-      
-      curJson = {
-        weather: {
-          temperature: current.temperature_2m,
-          condition: getConditionName(current.weather_code),
-          icon: "cloudy",
-          wind_speed: current.wind_speed_10m,
-          relative_humidity: current.relative_humidity_2m,
-          pressure_msl: current.pressure_msl
-        }
-      };
-
-      wxJson = {
-        weather: (hourly.time || []).slice(0, 24).map((t, i) => ({
-          timestamp: t,
-          precipitation: hourly.precipitation ? hourly.precipitation[i] : 0,
-          temperature_2m: hourly.temperature_2m ? hourly.temperature_2m[i] : null,
-          weather_code: hourly.weather_code ? hourly.weather_code[i] : null,
-          wind_speed_10m: hourly.wind_speed_10m ? hourly.wind_speed_10m[i] : null
-        }))
-      };
-
-      alertJson = { alerts: [] };
-    }
-
-    // Pollen data (separate, optional)
-    const pollenRes = await fetch(`${OM}?latitude=${lat}&longitude=${lon}&hourly=alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen,ragweed_pollen&timezone=auto`).catch(()=>({ok:false}));
-    let pollen = null;
-    if(pollenRes.ok){
-      pollen = await pollenRes.json();
-    }
-
-    const cur = curJson.weather;
     const wx = wxJson.weather || [];
-    const alerts = alertJson?.alerts || [];
+    const alerts = (alertJson && alertJson.alerts) || [];
 
-    if(!cur || typeof cur !== 'object'){
-      throw new Error('Aktuelles Wetter: Ungültige Datenstruktur');
+    let cur = (curRes.ok && curJson.weather) ? curJson.weather : null;
+    let usedFallback = false;
+    if(!cur){
+      const nowTs = Date.now();
+      const nearest = wx.slice().sort((a,b)=>
+        Math.abs(new Date(a.timestamp)-nowTs) - Math.abs(new Date(b.timestamp)-nowTs)
+      )[0];
+      if(nearest){
+        cur = nearest;
+        usedFallback = true;
+      }
+    }
+    if(!cur){
+      throw new Error('Aktuelles Wetter: keine DWD-Daten für diesen Standort verfügbar (Bright Sky deckt primär Deutschland ab).');
     }
 
     const now = new Date();
@@ -421,21 +378,6 @@ async function render(){
     const futureHours = wx.filter(h => new Date(h.timestamp).getTime() >= now.getTime() - 30*60000).slice(0,8);
     const maxPrecip = Math.max(1, ...futureHours.map(h=>h.precipitation ?? 0));
     const totalNext3h = futureHours.slice(0,3).reduce((s,h)=>s+(h.precipitation??0),0);
-
-    // 6-hour forecast
-    const next6h = wx.filter(h => new Date(h.timestamp).getTime() >= now.getTime() - 30*60000).slice(0,6);
-    const forecastHtml = next6h.map(h=>{
-      const d = new Date(h.timestamp);
-      const temp = h.temperature_2m !== null ? Math.round(h.temperature_2m) : "–";
-      const cond = h.weather_code !== null ? getConditionName(h.weather_code) : "–";
-      const icon = h.weather_code !== null ? iconFor("cloudy", d.getHours()>6 && d.getHours()<20) : "🌡️";
-      return `<div class="forecast-item">
-        <div class="time">${d.getHours()}:00</div>
-        <div class="icon">${icon}</div>
-        <div class="temp">${temp}°</div>
-        <div class="condition">${cond}</div>
-      </div>`;
-    }).join("");
 
     let pollenHtml = "";
     if(pollen?.hourly?.time){
@@ -482,7 +424,7 @@ async function render(){
         <div class="now-row">
           <div>
             <div class="now-temp">${Math.round(cur.temperature)}°</div>
-            <div class="now-desc">${cur.condition ?? ""} · fühlt sich an wie ${Math.round(cur.temperature - (cur.wind_speed>15?2:0))}°</div>
+            <div class="now-desc">${cur.condition ?? ""} · fühlt sich an wie ${Math.round(cur.temperature - (cur.wind_speed>15?2:0))}°${usedFallback ? ' · Vorhersagewert (keine Live-Station in der Nähe)' : ''}</div>
           </div>
           <div class="now-icon">${iconFor(cur.icon, nowHour>6 && nowHour<20)}</div>
         </div>
@@ -498,11 +440,6 @@ async function render(){
         <div class="rain-summary">${totalNext3h > 0 ? `~${totalNext3h.toFixed(1)} mm in den nächsten 3h` : "Kein Regen in den nächsten 3h erwartet"}</div>
         <div class="rain-bars">${rainBars}</div>
         <div class="rain-labels">${rainLabels}</div>
-      </div>
-
-      <div class="card">
-        <h2>📊 6-Stunden Vorhersage</h2>
-        <div class="forecast-grid">${forecastHtml}</div>
       </div>
 
       <div class="card">
@@ -522,6 +459,121 @@ async function render(){
 
   } catch(e){
     app.innerHTML = `<div class="status">Fehler beim Laden der Daten.<br><span style="font-size:0.78rem">${e.message}</span><br><button onclick="loadAll()">Erneut versuchen</button></div>`;
+  }
+}
+
+function haversine(lat1, lon1, lat2, lon2){
+  const R = 6371;
+  const dLat = (lat2-lat1)*Math.PI/180;
+  const dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function mapsRouteUrl(lat, lon){
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`;
+}
+
+async function loadStellplaetze(){
+  const el = document.getElementById("stellApp");
+  if(!coords) return;
+  el.innerHTML = `
+    <div class="card">
+      <h2>🚐 Wohnmobilstellplätze in der Nähe</h2>
+      <div class="muted-note" style="margin-top:0;margin-bottom:10px;">Quelle: OpenStreetMap · sortiert nach Entfernung (keine Bewertungen verfügbar) · 6m-Eignung nicht generell filterbar</div>
+      <div class="spinner" style="margin:10px auto;"></div>
+    </div>`;
+
+  const {lat, lon} = coords;
+  const overpassUrl = "https://overpass-api.de/api/interpreter";
+  const radii = [30000, 80000, 150000];
+  let elements = [];
+
+  try{
+    for(const r of radii){
+      const query = `[out:json][timeout:25];
+        (
+          node["tourism"="caravan_site"](around:${r},${lat},${lon});
+          way["tourism"="caravan_site"](around:${r},${lat},${lon});
+          node["amenity"="parking"]["motorhome"="yes"](around:${r},${lat},${lon});
+        );
+        out center tags 40;`;
+      const res = await fetch(overpassUrl, {method:"POST", body: "data=" + encodeURIComponent(query)});
+      if(!res.ok) throw new Error(`Overpass-Fehler (HTTP ${res.status})`);
+      const data = await res.json();
+      elements = data.elements || [];
+      if(elements.length >= 5) break;
+    }
+
+    if(elements.length === 0){
+      document.getElementById("stellApp").innerHTML = `
+        <div class="card">
+          <h2>🚐 Wohnmobilstellplätze in der Nähe</h2>
+          <div class="muted-note" style="margin-top:0;">Keine Stellplätze im Umkreis von 150 km in OpenStreetMap gefunden.</div>
+        </div>`;
+      return;
+    }
+
+    const withCoords = elements.map(e=>{
+      const elat = e.lat ?? e.center?.lat;
+      const elon = e.lon ?? e.center?.lon;
+      return {...e, elat, elon, dist: (elat && elon) ? haversine(lat, lon, elat, elon) : Infinity};
+    }).filter(e => e.elat && e.elon);
+
+    withCoords.sort((a,b)=>a.dist-b.dist);
+    const top5 = withCoords.slice(0,5);
+
+    const cardsHtml = top5.map((p, idx)=>{
+      const t = p.tags || {};
+      const name = t.name || t["addr:city"] || "Wohnmobilstellplatz";
+      const distLabel = p.dist < 1 ? `${Math.round(p.dist*1000)} m` : `${p.dist.toFixed(1)} km entfernt`;
+      const img = t.image;
+      const imgHtml = img
+        ? `<img class="stell-img" src="${img}" alt="${name}" onerror="this.outerHTML='<div class=&quot;stell-img&quot;>🚐</div>'">`
+        : `<div class="stell-img">🚐</div>`;
+
+      const rows = [];
+      if(t["addr:street"] || t["addr:city"]) rows.push(`<div class="row"><b>Adresse:</b> ${[t["addr:street"], t["addr:housenumber"], t["addr:postcode"], t["addr:city"]].filter(Boolean).join(" ")}</div>`);
+      if(t.opening_hours) rows.push(`<div class="row"><b>Öffnungszeiten:</b> ${t.opening_hours}</div>`);
+      if(t.fee) rows.push(`<div class="row"><b>Gebühr:</b> ${t.fee === "yes" ? "kostenpflichtig" : t.fee === "no" ? "kostenlos" : t.fee}</div>`);
+      if(t.capacity) rows.push(`<div class="row"><b>Kapazität:</b> ${t.capacity} Stellplätze</div>`);
+      if(t["capacity:caravan"]) rows.push(`<div class="row"><b>Wohnmobil-Plätze:</b> ${t["capacity:caravan"]}</div>`);
+      if(t.maxlength) rows.push(`<div class="row"><b>Max. Länge:</b> ${t.maxlength}</div>`);
+      if(t.phone || t["contact:phone"]) rows.push(`<div class="row"><b>Telefon:</b> ${t.phone || t["contact:phone"]}</div>`);
+      if(t.website || t["contact:website"]) rows.push(`<div class="row"><b>Website:</b> <a href="${t.website || t["contact:website"]}" style="color:var(--accent)" target="_blank">öffnen</a></div>`);
+      if(t.description) rows.push(`<div class="row">${t.description}</div>`);
+      if(rows.length === 0) rows.push(`<div class="row">Keine weiteren Details in OpenStreetMap hinterlegt.</div>`);
+
+      return `
+        <details class="stell-card">
+          <summary class="stell-head">
+            ${imgHtml}
+            <div class="stell-info">
+              <div class="stell-name">${idx+1}. ${name}</div>
+              <div class="stell-dist">${distLabel}</div>
+            </div>
+            <div class="stell-chevron">▾</div>
+          </summary>
+          <div class="stell-body">
+            ${rows.join("")}
+            <a class="stell-route-btn" href="${mapsRouteUrl(p.elat, p.elon)}" target="_blank">📍 Route in Google Maps</a>
+          </div>
+        </details>`;
+    }).join("");
+
+    document.getElementById("stellApp").innerHTML = `
+      <div class="card">
+        <h2>🚐 Wohnmobilstellplätze in der Nähe</h2>
+        <div class="muted-note" style="margin-top:0;margin-bottom:10px;">Quelle: OpenStreetMap · sortiert nach Entfernung (keine Bewertungen verfügbar) · 6m-Eignung nicht generell filterbar</div>
+        ${cardsHtml}
+      </div>`;
+
+  } catch(e){
+    document.getElementById("stellApp").innerHTML = `
+      <div class="card">
+        <h2>🚐 Wohnmobilstellplätze in der Nähe</h2>
+        <div class="muted-note" style="margin-top:0;">Fehler beim Laden: ${e.message}</div>
+      </div>`;
   }
 }
 
