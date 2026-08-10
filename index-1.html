@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lokal-Wetter">
+<meta name="theme-color" content="#0f172a">
+<title>Lokal-Wetter</title>
+<style>
+  :root{
+    --bg:#081522;
+    --card:#0f2233;
+    --card2:#153049;
+    --text:#f1f5f9;
+    --muted:#88a0b5;
+    --accent:#00b4d8;
+    --accent2:#0077b6;
+    --warn:#ffb545;
+    --danger:#ff5d5d;
+    --ok:#4ade80;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:linear-gradient(180deg,#081522 0%,#0a1c2e 100%);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    min-height:100vh;
+    padding:env(safe-area-inset-top) 14px calc(env(safe-area-inset-bottom) + 24px);
+    -webkit-tap-highlight-color:transparent;
+  }
+  header{
+    padding:18px 4px 10px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  .brand{
+    display:flex;align-items:center;gap:9px;
+  }
+  .brand-badge{
+    width:34px;height:34px;border-radius:9px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:0.85rem;color:#04121c;
+    flex-shrink:0;
+  }
+  .brand-footer{
+    text-align:center;font-size:0.66rem;color:var(--muted);
+    margin-top:18px;opacity:0.7;
+  }
+  header h1{
+    font-size:1.15rem;
+    margin:0;
+    font-weight:600;
+  }
+  header .loc{
+    font-size:0.8rem;
+    color:var(--muted);
+    margin-top:2px;
+  }
+  #refreshBtn{
+    background:var(--card2);
+    border:none;
+    color:var(--accent);
+    width:38px;height:38px;
+    border-radius:50%;
+    font-size:1.1rem;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .card{
+    background:var(--card);
+    border-radius:18px;
+    padding:16px 18px;
+    margin-bottom:14px;
+    box-shadow:0 4px 18px rgba(0,0,0,0.25);
+  }
+  .card h2{
+    font-size:0.78rem;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+    color:var(--muted);
+    margin:0 0 10px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  .now-temp{
+    font-size:3rem;
+    font-weight:700;
+    line-height:1;
+  }
+  .now-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .now-icon{font-size:2.6rem;}
+  .now-desc{color:var(--muted);font-size:0.9rem;margin-top:6px;}
+  .stat-grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+    margin-top:14px;
+  }
+  .stat{
+    background:var(--card2);
+    border-radius:12px;
+    padding:10px;
+    text-align:center;
+  }
+  .stat .v{font-size:1.05rem;font-weight:600;}
+  .stat .l{font-size:0.68rem;color:var(--muted);margin-top:2px;}
+  .rain-bars{
+    display:flex;
+    align-items:flex-end;
+    gap:5px;
+    height:70px;
+    margin-top:6px;
+  }
+  .rain-bar{
+    flex:1;
+    background:var(--accent);
+    border-radius:4px 4px 0 0;
+    min-height:2px;
+    opacity:0.85;
+    position:relative;
+  }
+  .rain-bar.none{background:#2a3556;}
+  .rain-labels{
+    display:flex;
+    gap:5px;
+    margin-top:4px;
+  }
+  .rain-labels span{
+    flex:1;
+    text-align:center;
+    font-size:0.62rem;
+    color:var(--muted);
+  }
+  .rain-summary{font-size:0.82rem;color:var(--muted);margin-bottom:2px;}
+  .pollen-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:7px 0;
+    border-bottom:1px solid rgba(255,255,255,0.06);
+    font-size:0.88rem;
+  }
+  .pollen-row:last-child{border-bottom:none;}
+  .pollen-badge{
+    font-size:0.7rem;
+    font-weight:600;
+    padding:3px 9px;
+    border-radius:20px;
+  }
+  .b-none{background:rgba(74,222,128,0.15);color:var(--ok);}
+  .b-low{background:rgba(94,177,255,0.15);color:var(--accent);}
+  .b-med{background:rgba(255,181,69,0.15);color:var(--warn);}
+  .b-high{background:rgba(255,93,93,0.15);color:var(--danger);}
+  .warn-item{
+    border-radius:12px;
+    padding:12px 14px;
+    margin-bottom:8px;
+    background:rgba(255,93,93,0.1);
+    border:1px solid rgba(255,93,93,0.35);
+  }
+  .warn-item .t{font-weight:600;font-size:0.9rem;color:#ffb0b0;}
+  .warn-item .d{font-size:0.78rem;color:var(--muted);margin-top:4px;}
+  .empty-ok{
+    display:flex;align-items:center;gap:8px;
+    color:var(--ok);font-size:0.88rem;
+  }
+  .muted-note{
+    font-size:0.72rem;color:var(--muted);text-align:center;margin-top:6px;
+  }
+  .status{
+    text-align:center;color:var(--muted);padding:60px 10px;font-size:0.9rem;
+  }
+  .status button{
+    margin-top:14px;
+    background:var(--accent);
+    color:#03203d;
+    border:none;
+    padding:10px 20px;
+    border-radius:10px;
+    font-weight:600;
+    font-size:0.9rem;
+  }
+  .updated{
+    text-align:center;font-size:0.68rem;color:var(--muted);margin-top:6px;
+  }
+  .spinner{
+    width:22px;height:22px;border-radius:50%;
+    border:3px solid rgba(255,255,255,0.15);
+    border-top-color:var(--accent);
+    animation:spin 0.8s linear infinite;
+    margin:0 auto 14px;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .stell-card{
+    background:var(--card2);
+    border-radius:14px;
+    margin-bottom:10px;
+    overflow:hidden;
+  }
+  .stell-head{
+    display:flex;
+    gap:10px;
+    padding:10px;
+    align-items:center;
+    cursor:pointer;
+    list-style:none;
+  }
+  .stell-head::-webkit-details-marker{display:none;}
+  .stell-img{
+    width:54px;height:54px;border-radius:10px;
+    object-fit:cover;flex-shrink:0;
+    background:#0a1c2e;
+    display:flex;align-items:center;justify-content:center;
+    font-size:1.4rem;
+  }
+  .stell-info{flex:1;min-width:0;}
+  .stell-name{font-size:0.9rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .stell-dist{font-size:0.75rem;color:var(--muted);margin-top:2px;}
+  .stell-chevron{color:var(--muted);font-size:0.8rem;transition:transform 0.2s;}
+  details[open] .stell-chevron{transform:rotate(180deg);}
+  .stell-body{
+    padding:0 12px 12px;
+    font-size:0.82rem;
+    color:var(--muted);
+    line-height:1.5;
+  }
+  .stell-body .row{margin-bottom:4px;}
+  .stell-body .row b{color:var(--text);font-weight:500;}
+  .stell-route-btn{
+    display:inline-block;
+    margin-top:8px;
+    background:var(--accent);
+    color:#03203d;
+    font-weight:600;
+    font-size:0.8rem;
+    padding:8px 14px;
+    border-radius:9px;
+    text-decoration:none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-badge">NT</div>
+    <div>
+      <h1 id="cityName">Lokal-Wetter</h1>
+      <div class="loc" id="locLabel">Standort wird ermittelt…</div>
+    </div>
+  </div>
+  <button id="refreshBtn" onclick="loadAll()">↻</button>
+</header>
+
+<div id="app">
+  <div class="status" id="statusBox">
+    <div class="spinner"></div>
+    Standort wird angefragt…
+  </div>
+</div>
+<div id="stellApp"></div>
+
+<script>
+const BS = "https://api.brightsky.dev";
+const OM = "https://air-quality-api.open-meteo.com/v1/air-quality";
+const GEO = "https://geocoding-api.open-meteo.com/v1/reverse";
+
+let coords = null;
+
+function iconFor(condition, isDay){
+  const map = {
+    "clear-day":"☀️","clear-night":"🌙","partly-cloudy-day":"⛅","partly-cloudy-night":"☁️",
+    "cloudy":"☁️","fog":"🌫️","wind":"🌬️","rain":"🌧️","sleet":"🌨️","snow":"❄️","hail":"🌨️",
+    "thunderstorm":"⛈️","dry":isDay?"☀️":"🌙"
+  };
+  return map[condition] || "🌡️";
+}
+
+function pollenBadge(v){
+  if(v === null || v === undefined) return {label:"–", cls:"b-none"};
+  if(v < 10) return {label:"keine", cls:"b-none"};
+  if(v < 25) return {label:"gering", cls:"b-low"};
+  if(v < 50) return {label:"mittel", cls:"b-med"};
+  return {label:"hoch", cls:"b-high"};
+}
+
+function severityColor(sev){
+  if(sev === "extreme" || sev === "severe") return "rgba(255,93,93,0.14)";
+  if(sev === "moderate") return "rgba(255,181,69,0.14)";
+  return "rgba(255,255,255,0.06)";
+}
+
+async function loadAll(){
+  const statusBox = document.getElementById("statusBox");
+  const app = document.getElementById("app");
+  if(!coords){
+    statusBox.innerHTML = '<div class="spinner"></div>Standort wird angefragt…';
+    if(!app.contains(statusBox)) app.innerHTML = "";
+    app.appendChild(statusBox);
+    navigator.geolocation.getCurrentPosition(async pos=>{
+      coords = {lat: pos.coords.latitude, lon: pos.coords.longitude};
+      await render();
+      loadStellplaetze();
+    }, err=>{
+      statusBox.innerHTML = 'Standort nicht verfügbar.<br><span style="font-size:0.78rem">'+err.message+'</span><br><button onclick="loadAll()">Erneut versuchen</button>';
+    }, {enableHighAccuracy:true, timeout:12000});
+  } else {
+    await render();
+    loadStellplaetze();
+  }
+}
+
+async function render(){
+  const app = document.getElementById("app");
+  app.innerHTML = '<div class="status"><div class="spinner"></div>Daten werden geladen…</div>';
+  try{
+    const {lat, lon} = coords;
+
+    fetch(`${GEO}?latitude=${lat}&longitude=${lon}&language=de&count=1`)
+      .then(r=>r.json()).then(g=>{
+        const name = g?.results?.[0]?.name;
+        const admin = g?.results?.[0]?.admin1;
+        document.getElementById("locLabel").textContent = name ? `${name}${admin ? ", "+admin : ""}` : `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+      }).catch(()=>{
+        document.getElementById("locLabel").textContent = `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+      });
+
+    const today = new Date().toISOString().slice(0,10);
+
+    // Verbessertes Fehler-Reporting: Promise.allSettled verwenden und einzelne Antworten prüfen
+    const fetches = await Promise.allSettled([
+      fetch(`${BS}/current_weather?lat=${lat}&lon=${lon}&max_dist=200000`),
+      fetch(`${BS}/weather?lat=${lat}&lon=${lon}&date=${today}&max_dist=200000`),
+      fetch(`${BS}/alerts?lat=${lat}&lon=${lon}`),
+      fetch(`${OM}?latitude=${lat}&longitude=${lon}&hourly=alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen,ragweed_pollen&timezone=auto`)
+    ]);
+
+    function check(result, name){
+      if(result.status === 'rejected') throw new Error(`${name}: Netzwerkfehler (${result.reason && result.reason.message ? result.reason.message : result.reason})`);
+      return result.value;
+    }
+
+    const [curRes, wxRes, alertRes, pollenRes] = ['current_weather','weather','alerts','pollen'].map((n,i)=> check(fetches[i], n));
+
+    // current_weather ist NICHT kritisch: DWD hat nur innerhalb Deutschlands (+Grenznähe) Stationen.
+    // Bei 404 "No sources match your criteria" (z.B. im Ausland unterwegs) NICHT hart fehlschlagen,
+    // sondern weiter unten auf den nächsten Forecast-Wert aus /weather zurückfallen.
+    let curOk = curRes.ok;
+    let curHttpError = null;
+    if(!curOk){
+      const txt = await curRes.text().catch(()=>null);
+      curHttpError = `current_weather: HTTP ${curRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`;
+    }
+
+    // NUR /weather (MOSMIX-Vorhersage) ist wirklich kritisch — das ist der einzige DWD-Datensatz
+    // mit globaler Abdeckung, ohne den die App keine sinnvollen Zahlen anzeigen kann.
+    if(!wxRes.ok) {
+      const txt = await wxRes.text().catch(()=>null);
+      throw new Error(`weather: HTTP ${wxRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`);
+    }
+
+    // /alerts (amtliche Warnungen) deckt NUR Deutschland ab — außerhalb liefert der DWD 404
+    // ("not covered"). Das ist kein echter Fehler, sondern schlicht "keine Warnungen verfügbar".
+    let alertOk = alertRes.ok;
+    let alertHttpError = null;
+    if(!alertOk){
+      const txt = await alertRes.text().catch(()=>null);
+      alertHttpError = `alerts: HTTP ${alertRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`;
+    }
+
+    // /pollen (Open-Meteo) deckt primär Europa ab — außerhalb dieses Bereichs ebenfalls unkritisch behandeln.
+    let pollenOk = pollenRes.ok;
+    let pollenHttpError = null;
+    if(!pollenOk){
+      const txt = await pollenRes.text().catch(()=>null);
+      pollenHttpError = `pollen: HTTP ${pollenRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`;
+    }
+
+    const curJson = curOk ? await curRes.json().catch(()=>{ throw new Error('current_weather: ungültiges JSON'); }) : null;
+    const wxJson = await wxRes.json().catch(()=>{ throw new Error('weather: ungültiges JSON'); });
+    const alertJson = alertOk ? await alertRes.json().catch(()=>null) : null;
+    const pollen = pollenOk ? await pollenRes.json().catch(()=>null) : null;
+
+    const wx = wxJson.weather || [];
+    const alerts = (alertJson && alertJson.alerts) || [];
+
+    let cur = (curOk && curJson && curJson.weather) ? curJson.weather : null;
+    let usedFallback = false;
+    if(!cur){
+      const nowTs = Date.now();
+      const nearest = wx.slice().sort((a,b)=>
+        Math.abs(new Date(a.timestamp)-nowTs) - Math.abs(new Date(b.timestamp)-nowTs)
+      )[0];
+      if(nearest){
+        cur = nearest;
+        usedFallback = true;
+      }
+    }
+    if(!cur){
+      // Auch der Fallback aus /weather hat nichts geliefert -> hier ist wirklich nichts verfügbar
+      // (typischerweise weit außerhalb der DWD-Abdeckung).
+      const reason = curHttpError ? ` (${curHttpError})` : '';
+      throw new Error(`Aktuelles Wetter: keine DWD-Daten für diesen Standort verfügbar. Bright Sky deckt primär Deutschland ab${reason}.`);
+    }
+
+    const now = new Date();
+    const nowHour = now.getHours();
+
+    const futureHours = wx.filter(h => new Date(h.timestamp).getTime() >= now.getTime() - 30*60000).slice(0,8);
+    const maxPrecip = Math.max(1, ...futureHours.map(h=>h.precipitation ?? 0));
+    const totalNext3h = futureHours.slice(0,3).reduce((s,h)=>s+(h.precipitation??0),0);
+
+    let pollenHtml = "";
+    if(!pollenOk){
+      pollenHtml = `<div class="muted-note">Pollendaten hier nicht verfügbar (Open-Meteo deckt primär Europa ab).</div>`;
+    } else if(pollen?.hourly?.time){
+      const idx = pollen.hourly.time.findIndex(t => new Date(t).getTime() >= now.getTime());
+      const i = idx === -1 ? 0 : idx;
+      const types = [
+        ["Gräser","grass_pollen"],["Birke","birch_pollen"],["Erle","alder_pollen"],
+        ["Beifuß","mugwort_pollen"],["Olive","olive_pollen"],["Ambrosia","ragweed_pollen"]
+      ];
+      pollenHtml = types.map(([label,key])=>{
+        const val = pollen.hourly[key]?.[i];
+        const b = pollenBadge(val);
+        return `<div class="pollen-row"><span>${label}</span><span class="pollen-badge ${b.cls}">${b.label}</span></div>`;
+      }).join("");
+    } else {
+      pollenHtml = '<div class="muted-note">Keine Pollendaten für diesen Standort verfügbar.</div>';
+    }
+
+    let warnHtml = "";
+    if(!alertOk){
+      warnHtml = '<div class="muted-note" style="margin-top:0;">Amtliche Warnungen hier nicht verfügbar (DWD deckt nur Deutschland ab).</div>';
+    } else if(alerts.length === 0){
+      warnHtml = '<div class="empty-ok">✅ Keine aktuellen Warnungen für deine Region</div>';
+    } else {
+      warnHtml = alerts.map(a=>{
+        return `<div class="warn-item" style="background:${severityColor(a.severity)}">
+          <div class="t">${a.event || "Warnung"}</div>
+          <div class="d">${a.headline || a.description?.slice(0,140) || ""}</div>
+        </div>`;
+      }).join("");
+    }
+
+    const rainBars = futureHours.map(h=>{
+      const p = h.precipitation ?? 0;
+      const hgt = Math.max(2, Math.round((p/maxPrecip)*66));
+      return `<div class="rain-bar ${p===0?'none':''}" style="height:${hgt}px" title="${p}mm"></div>`;
+    }).join("");
+    const rainLabels = futureHours.map(h=>{
+      const d = new Date(h.timestamp);
+      return `<span>${d.getHours()}h</span>`;
+    }).join("");
+
+    app.innerHTML = `
+      <div class="card">
+        <h2>Aktuell</h2>
+        <div class="now-row">
+          <div>
+            <div class="now-temp">${Math.round(cur.temperature)}°</div>
+            <div class="now-desc">${cur.condition ?? ""} · fühlt sich an wie ${Math.round(cur.temperature - (cur.wind_speed>15?2:0))}°${usedFallback ? ' · Vorhersagewert (keine Live-Station in der Nähe)' : ''}</div>
+          </div>
+          <div class="now-icon">${iconFor(cur.icon, nowHour>6 && nowHour<20)}</div>
+        </div>
+        <div class="stat-grid">
+          <div class="stat"><div class="v">${cur.wind_speed ?? "–"} km/h</div><div class="l">Wind</div></div>
+          <div class="stat"><div class="v">${cur.relative_humidity ?? "–"}%</div><div class="l">Luftfeuchte</div></div>
+          <div class="stat"><div class="v">${cur.pressure_msl ?? "–"} hPa</div><div class="l">Luftdruck</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🌧️ Regen (nächste Stunden)</h2>
+        <div class="rain-summary">${totalNext3h > 0 ? `~${totalNext3h.toFixed(1)} mm in den nächsten 3h` : "Kein Regen in den nächsten 3h erwartet"}</div>
+        <div class="rain-bars">${rainBars}</div>
+        <div class="rain-labels">${rainLabels}</div>
+      </div>
+
+      <div class="card">
+        <h2>🌾 Pollenbelastung</h2>
+        ${pollenHtml}
+        <div class="muted-note">Quelle: Open-Meteo (europäisches Pollenmodell)</div>
+      </div>
+
+      <div class="card">
+        <h2>⚠️ Amtliche Warnungen</h2>
+        ${warnHtml}
+      </div>
+
+      <div class="updated">Aktualisiert um ${now.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} · Daten: DWD via Bright Sky, Open-Meteo</div>
+      <div class="brand-footer">NetTronix.de — CI-Farben geschätzt, bitte mit echten Werten abgleichen</div>
+    `;
+
+  } catch(e){
+    app.innerHTML = `<div class="status">Fehler beim Laden der Daten.<br><span style="font-size:0.78rem">${e.message}</span><br><button onclick="loadAll()">Erneut versuchen</button></div>`;
+  }
+}
+
+function haversine(lat1, lon1, lat2, lon2){
+  const R = 6371;
+  const dLat = (lat2-lat1)*Math.PI/180;
+  const dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function mapsRouteUrl(lat, lon){
+  return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&travelmode=driving`;
+}
+
+async function loadStellplaetze(){
+  const el = document.getElementById("stellApp");
+  if(!coords) return;
+  el.innerHTML = `
+    <div class="card">
+      <h2>🚐 Wohnmobilstellplätze in der Nähe</h2>
+      <div class="muted-note" style="margin-top:0;margin-bottom:10px;">Quelle: OpenStreetMap · sortiert nach Entfernung (keine Bewertungen verfügbar) · 6m-Eignung nicht generell filterbar</div>
+      <div class="spinner" style="margin:10px auto;"></div>
+    </div>`;
+
+  const {lat, lon} = coords;
+  // Mehrere Overpass-Spiegelserver: der öffentliche Hauptserver (overpass-api.de) ist häufig
+  // überlastet (504). Bei Fehler/Timeout wird automatisch der nächste Spiegel versucht.
+  const overpassMirrors = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter"
+  ];
+  const radii = [30000, 80000, 150000];
+  let elements = [];
+  let lastError = null;
+
+  async function fetchWithTimeout(url, options, ms){
+    const controller = new AbortController();
+    const id = setTimeout(()=>controller.abort(), ms);
+    try{
+      return await fetch(url, {...options, signal: controller.signal});
+    } finally {
+      clearTimeout(id);
+    }
+  }
+
+  async function queryOverpass(query){
+    let mirrorError = null;
+    for(const mirror of overpassMirrors){
+      try{
+        const res = await fetchWithTimeout(mirror, {method:"POST", body: "data=" + encodeURIComponent(query)}, 15000);
+        if(!res.ok){
+          mirrorError = new Error(`Overpass-Fehler (HTTP ${res.status}) bei ${mirror.replace('https://','').split('/')[0]}`);
+          continue; // nächsten Spiegel versuchen
+        }
+        return await res.json();
+      } catch(e){
+        mirrorError = e.name === 'AbortError'
+          ? new Error(`Zeitüberschreitung bei ${mirror.replace('https://','').split('/')[0]}`)
+          : e;
+        continue; // nächsten Spiegel versuchen
+      }
+    }
+    throw mirrorError || new Error('Alle Overpass-Server nicht erreichbar');
+  }
+
+  try{
+    for(const r of radii){
+      const query = `[out:json][timeout:20];
+        (
+          node["tourism"="caravan_site"](around:${r},${lat},${lon});
+          way["tourism"="caravan_site"](around:${r},${lat},${lon});
+          node["amenity"="parking"]["motorhome"="yes"](around:${r},${lat},${lon});
+        );
+        out center tags 40;`;
+      try{
+        const data = await queryOverpass(query);
+        elements = data.elements || [];
+        if(elements.length >= 5) break;
+      } catch(e){
+        lastError = e;
+        // Bei dieser Radius-Stufe hat kein Spiegel geantwortet — trotzdem mit der nächsten,
+        // größeren Stufe weitermachen statt sofort komplett abzubrechen.
+        continue;
+      }
+    }
+
+    if(elements.length === 0 && lastError){
+      throw lastError;
+    }
+
+    if(elements.length === 0){
+      document.getElementById("stellApp").innerHTML = `
+        <div class="card">
+          <h2>🚐 Wohnmobilstellplätze in der Nähe</h2>
+          <div class="muted-note" style="margin-top:0;">Keine Stellplätze im Umkreis von 150 km in OpenStreetMap gefunden.</div>
+        </div>`;
+      return;
+    }
+
+    const withCoords = elements.map(e=>{
+      const elat = e.lat ?? e.center?.lat;
+      const elon = e.lon ?? e.center?.lon;
+      return {...e, elat, elon, dist: (elat && elon) ? haversine(lat, lon, elat, elon) : Infinity};
+    }).filter(e => e.elat && e.elon);
+
+    withCoords.sort((a,b)=>a.dist-b.dist);
+    const top5 = withCoords.slice(0,5);
+
+    const cardsHtml = top5.map((p, idx)=>{
+      const t = p.tags || {};
+      const name = t.name || t["addr:city"] || "Wohnmobilstellplatz";
+      const distLabel = p.dist < 1 ? `${Math.round(p.dist*1000)} m` : `${p.dist.toFixed(1)} km entfernt`;
+      const img = t.image;
+      const imgHtml = img
+        ? `<img class="stell-img" src="${img}" alt="${name}" onerror="this.outerHTML='<div class=&quot;stell-img&quot;>🚐</div>'">`
+        : `<div class="stell-img">🚐</div>`;
+
+      const rows = [];
+      if(t["addr:street"] || t["addr:city"]) rows.push(`<div class="row"><b>Adresse:</b> ${[t["addr:street"], t["addr:housenumber"], t["addr:postcode"], t["addr:city"]].filter(Boolean).join(" ")}</div>`);
+      if(t.opening_hours) rows.push(`<div class="row"><b>Öffnungszeiten:</b> ${t.opening_hours}</div>`);
+      if(t.fee) rows.push(`<div class="row"><b>Gebühr:</b> ${t.fee === "yes" ? "kostenpflichtig" : t.fee === "no" ? "kostenlos" : t.fee}</div>`);
+      if(t.capacity) rows.push(`<div class="row"><b>Kapazität:</b> ${t.capacity} Stellplätze</div>`);
+      if(t["capacity:caravan"]) rows.push(`<div class="row"><b>Wohnmobil-Plätze:</b> ${t["capacity:caravan"]}</div>`);
+      if(t.maxlength) rows.push(`<div class="row"><b>Max. Länge:</b> ${t.maxlength}</div>`);
+      if(t.phone || t["contact:phone"]) rows.push(`<div class="row"><b>Telefon:</b> ${t.phone || t["contact:phone"]}</div>`);
+      if(t.website || t["contact:website"]) rows.push(`<div class="row"><b>Web:</b> ${t.website || t["contact:website"]}</div>`);
+
+      return `
+        <details class="stell-card">
+          <summary class="stell-head">
+            ${imgHtml}
+            <div class="stell-info">
+              <div class="stell-name">${name}</div>
+              <div class="stell-dist">${distLabel}</div>
+            </div>
+            <div class="stell-chevron">▾</div>
+          </summary>
+          <div class="stell-body">
+            ${rows.join("") || '<div class="row">Keine weiteren Details in OpenStreetMap hinterlegt.</div>'}
+            <a class="stell-route-btn" href="${mapsRouteUrl(p.elat, p.elon)}" target="_blank" rel="noopener">Route planen</a>
+          </div>
+        </details>`;
+    }).join("");
+
+    document.getElementById("stellApp").innerHTML = `
+      <div class="card">
+        <h2>🚐 Wohnmobilstellplätze in der Nähe</h2>
+        <div class="muted-note" style="margin-top:0;margin-bottom:10px;">Quelle: OpenStreetMap · sortiert nach Entfernung (keine Bewertungen verfügbar) · 6m-Eignung nicht generell filterbar</div>
+      </div>
+      ${cardsHtml}
+    `;
+
+  } catch(e){
+    document.getElementById("stellApp").innerHTML = `
+      <div class="card">
+        <h2>🚐 Wohnmobilstellplätze in der Nähe</h2>
+        <div class="muted-note" style="margin-top:0;">Fehler beim Laden: ${e.message}</div>
+      </div>`;
+  }
+}
+
+loadAll();
+</script>
+</body>
+</html>
