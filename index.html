@@ -352,11 +352,17 @@ async function render(){
 
     const [curRes, wxRes, alertRes, pollenRes] = ['current_weather','weather','alerts','pollen'].map((n,i)=> check(fetches[i], n));
 
-    // HTTP-Status prüfen und ggf. aussagekräftige Fehlermeldungen erzeugen
-    if(!curRes.ok) {
+    // current_weather ist NICHT kritisch: DWD hat nur innerhalb Deutschlands (+Grenznähe) Stationen.
+    // Bei 404 "No sources match your criteria" (z.B. im Ausland unterwegs) NICHT hart fehlschlagen,
+    // sondern weiter unten auf den nächsten Forecast-Wert aus /weather zurückfallen.
+    let curOk = curRes.ok;
+    let curHttpError = null;
+    if(!curOk){
       const txt = await curRes.text().catch(()=>null);
-      throw new Error(`current_weather: HTTP ${curRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`);
+      curHttpError = `current_weather: HTTP ${curRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`;
     }
+
+    // /weather, /alerts und /pollen bleiben kritisch — ohne sie fehlt die Kernfunktion der App.
     if(!wxRes.ok) {
       const txt = await wxRes.text().catch(()=>null);
       throw new Error(`weather: HTTP ${wxRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`);
@@ -370,7 +376,7 @@ async function render(){
       throw new Error(`pollen: HTTP ${pollenRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`);
     }
 
-    const curJson = await curRes.json().catch(()=>{ throw new Error('current_weather: ungültiges JSON'); });
+    const curJson = curOk ? await curRes.json().catch(()=>{ throw new Error('current_weather: ungültiges JSON'); }) : null;
     const wxJson = await wxRes.json().catch(()=>{ throw new Error('weather: ungültiges JSON'); });
     const alertJson = await alertRes.json().catch(()=>{ throw new Error('alerts: ungültiges JSON'); });
     const pollen = await pollenRes.json().catch(()=>{ throw new Error('pollen: ungültiges JSON'); });
@@ -378,7 +384,7 @@ async function render(){
     const wx = wxJson.weather || [];
     const alerts = (alertJson && alertJson.alerts) || [];
 
-    let cur = (curRes.ok && curJson.weather) ? curJson.weather : null;
+    let cur = (curOk && curJson && curJson.weather) ? curJson.weather : null;
     let usedFallback = false;
     if(!cur){
       const nowTs = Date.now();
@@ -391,7 +397,10 @@ async function render(){
       }
     }
     if(!cur){
-      throw new Error('Aktuelles Wetter: keine DWD-Daten für diesen Standort verfügbar (Bright Sky deckt primär Deutschland ab).');
+      // Auch der Fallback aus /weather hat nichts geliefert -> hier ist wirklich nichts verfügbar
+      // (typischerweise weit außerhalb der DWD-Abdeckung).
+      const reason = curHttpError ? ` (${curHttpError})` : '';
+      throw new Error(`Aktuelles Wetter: keine DWD-Daten für diesen Standort verfügbar. Bright Sky deckt primär Deutschland ab${reason}.`);
     }
 
     const now = new Date();
@@ -562,23 +571,21 @@ async function loadStellplaetze(){
       if(t["capacity:caravan"]) rows.push(`<div class="row"><b>Wohnmobil-Plätze:</b> ${t["capacity:caravan"]}</div>`);
       if(t.maxlength) rows.push(`<div class="row"><b>Max. Länge:</b> ${t.maxlength}</div>`);
       if(t.phone || t["contact:phone"]) rows.push(`<div class="row"><b>Telefon:</b> ${t.phone || t["contact:phone"]}</div>`);
-      if(t.website || t["contact:website"]) rows.push(`<div class="row"><b>Website:</b> <a href="${t.website || t["contact:website"]}" style="color:var(--accent)" target="_blank">öffnen</a></div>`);
-      if(t.description) rows.push(`<div class="row">${t.description}</div>`);
-      if(rows.length === 0) rows.push(`<div class="row">Keine weiteren Details in OpenStreetMap hinterlegt.</div>`);
+      if(t.website || t["contact:website"]) rows.push(`<div class="row"><b>Web:</b> ${t.website || t["contact:website"]}</div>`);
 
       return `
         <details class="stell-card">
           <summary class="stell-head">
             ${imgHtml}
             <div class="stell-info">
-              <div class="stell-name">${idx+1}. ${name}</div>
+              <div class="stell-name">${name}</div>
               <div class="stell-dist">${distLabel}</div>
             </div>
             <div class="stell-chevron">▾</div>
           </summary>
           <div class="stell-body">
-            ${rows.join("")}
-            <a class="stell-route-btn" href="${mapsRouteUrl(p.elat, p.elon)}" target="_blank">📍 Route in Google Maps</a>
+            ${rows.join("") || '<div class="row">Keine weiteren Details in OpenStreetMap hinterlegt.</div>'}
+            <a class="stell-route-btn" href="${mapsRouteUrl(p.elat, p.elon)}" target="_blank" rel="noopener">Route planen</a>
           </div>
         </details>`;
     }).join("");
@@ -587,8 +594,9 @@ async function loadStellplaetze(){
       <div class="card">
         <h2>🚐 Wohnmobilstellplätze in der Nähe</h2>
         <div class="muted-note" style="margin-top:0;margin-bottom:10px;">Quelle: OpenStreetMap · sortiert nach Entfernung (keine Bewertungen verfügbar) · 6m-Eignung nicht generell filterbar</div>
-        ${cardsHtml}
-      </div>`;
+      </div>
+      ${cardsHtml}
+    `;
 
   } catch(e){
     document.getElementById("stellApp").innerHTML = `
