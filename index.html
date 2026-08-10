@@ -362,24 +362,34 @@ async function render(){
       curHttpError = `current_weather: HTTP ${curRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`;
     }
 
-    // /weather, /alerts und /pollen bleiben kritisch — ohne sie fehlt die Kernfunktion der App.
+    // NUR /weather (MOSMIX-Vorhersage) ist wirklich kritisch — das ist der einzige DWD-Datensatz
+    // mit globaler Abdeckung, ohne den die App keine sinnvollen Zahlen anzeigen kann.
     if(!wxRes.ok) {
       const txt = await wxRes.text().catch(()=>null);
       throw new Error(`weather: HTTP ${wxRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`);
     }
-    if(!alertRes.ok) {
+
+    // /alerts (amtliche Warnungen) deckt NUR Deutschland ab — außerhalb liefert der DWD 404
+    // ("not covered"). Das ist kein echter Fehler, sondern schlicht "keine Warnungen verfügbar".
+    let alertOk = alertRes.ok;
+    let alertHttpError = null;
+    if(!alertOk){
       const txt = await alertRes.text().catch(()=>null);
-      throw new Error(`alerts: HTTP ${alertRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`);
+      alertHttpError = `alerts: HTTP ${alertRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`;
     }
-    if(!pollenRes.ok) {
+
+    // /pollen (Open-Meteo) deckt primär Europa ab — außerhalb dieses Bereichs ebenfalls unkritisch behandeln.
+    let pollenOk = pollenRes.ok;
+    let pollenHttpError = null;
+    if(!pollenOk){
       const txt = await pollenRes.text().catch(()=>null);
-      throw new Error(`pollen: HTTP ${pollenRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`);
+      pollenHttpError = `pollen: HTTP ${pollenRes.status}${txt ? ' - '+txt.slice(0,150) : ''}`;
     }
 
     const curJson = curOk ? await curRes.json().catch(()=>{ throw new Error('current_weather: ungültiges JSON'); }) : null;
     const wxJson = await wxRes.json().catch(()=>{ throw new Error('weather: ungültiges JSON'); });
-    const alertJson = await alertRes.json().catch(()=>{ throw new Error('alerts: ungültiges JSON'); });
-    const pollen = await pollenRes.json().catch(()=>{ throw new Error('pollen: ungültiges JSON'); });
+    const alertJson = alertOk ? await alertRes.json().catch(()=>null) : null;
+    const pollen = pollenOk ? await pollenRes.json().catch(()=>null) : null;
 
     const wx = wxJson.weather || [];
     const alerts = (alertJson && alertJson.alerts) || [];
@@ -411,7 +421,9 @@ async function render(){
     const totalNext3h = futureHours.slice(0,3).reduce((s,h)=>s+(h.precipitation??0),0);
 
     let pollenHtml = "";
-    if(pollen?.hourly?.time){
+    if(!pollenOk){
+      pollenHtml = `<div class="muted-note">Pollendaten hier nicht verfügbar (Open-Meteo deckt primär Europa ab).</div>`;
+    } else if(pollen?.hourly?.time){
       const idx = pollen.hourly.time.findIndex(t => new Date(t).getTime() >= now.getTime());
       const i = idx === -1 ? 0 : idx;
       const types = [
@@ -428,7 +440,9 @@ async function render(){
     }
 
     let warnHtml = "";
-    if(alerts.length === 0){
+    if(!alertOk){
+      warnHtml = '<div class="muted-note" style="margin-top:0;">Amtliche Warnungen hier nicht verfügbar (DWD deckt nur Deutschland ab).</div>';
+    } else if(alerts.length === 0){
       warnHtml = '<div class="empty-ok">✅ Keine aktuellen Warnungen für deine Region</div>';
     } else {
       warnHtml = alerts.map(a=>{
